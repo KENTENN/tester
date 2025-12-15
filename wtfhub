@@ -1,21 +1,12 @@
 repeat task.wait() until game:IsLoaded()
 -- =========================
--- STARTGAME : Zombie Loop
+-- STARTGAME : Zombie Loop (Fixed - Looping Warp Attack)
 -- =========================
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- รอตัวละคร
-local character = player.Character or player.CharacterAdded:Wait()
-local root = character:WaitForChild("HumanoidRootPart", 5)
-
-if not root then
-    warn("[ERROR] ไม่พบ HumanoidRootPart ของผู้เล่น")
-    return
-end
-
--- จุดวาร์ปรอ
+-- จุดวาร์ปรอ/จุดกระตุ้นบอส
 local SAFE_POSITION = Vector3.new(24, 12, 70)
 
 -- Path มอนจริง
@@ -34,8 +25,13 @@ end
 -- =========================
 -- ฟังก์ชันวาร์ป
 -- =========================
-local function warpTo(position)
-    root.CFrame = CFrame.new(position)
+local function warpTo(character, position)
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if root then
+        root.CFrame = CFrame.new(position)
+    else
+        warn("[WARN] ตัวละครตายหรือยังไม่เกิดใหม่, ไม่สามารถวาร์ปได้")
+    end
 end
 
 -- =========================
@@ -43,13 +39,11 @@ end
 -- =========================
 local function getZombie()
     local zombie = ZOMBIE_FOLDER:FindFirstChild("1")
-
+    
     if not zombie then
-        warn("[INFO] Zombie[1] ยังไม่เกิด")
-        return nil
+        return nil, nil, true -- zombie, zRoot, bossDied
     end
 
-    -- หา part หลักของมอน
     local mainPart =
         zombie:FindFirstChild("HumanoidRootPart")
         or zombie:FindFirstChild("Root")
@@ -57,38 +51,86 @@ local function getZombie()
 
     if not mainPart then
         warn("[ERROR] Zombie[1] ไม่มี Part สำหรับวาร์ป")
-        return nil
+        return nil, nil, false
     end
 
-    return zombie, mainPart
+    return zombie, mainPart, false -- zombie, zRoot, bossDied
 end
 
 -- =========================
--- Loop หลัก
+-- ฟังก์ชันหลัก: การจัดการผู้เล่นและการฟาร์ม
 -- =========================
 local function FarmZombie()
     print("[START] เริ่ม Farm Zombie[1]")
 
     while true do
-        local zombie, zRoot = getZombie()
+        -- 1. รอตัวละคร (เผื่อตาย)
+        local character = player.Character or player.CharacterAdded:Wait()
+        local root = character:WaitForChild("HumanoidRootPart", 5)
 
-        -- ❌ ยังไม่เจอมอน
-        if not zombie then
-            warpTo(SAFE_POSITION)
-            task.wait(1)
+        if not root then
+            warn("[ERROR] ไม่พบ HumanoidRootPart ของผู้เล่น, รอเกิดใหม่...")
+            task.wait(2)
             continue
         end
 
-        -- ✔ เจอมอน → บินเข้าไปใกล้
-        warpTo(zRoot.Position + Vector3.new(0, -10, 0))
+        -- ❗ วาร์ปไปที่ SAFE_POSITION เพื่อกระตุ้นบอส (ทำทุกครั้งหลังเกิดใหม่)
+        print("[ACTION] วาร์ปไปที่ SAFE_POSITION เพื่อกระตุ้นบอส")
+        warpTo(character, SAFE_POSITION)
+        task.wait(0.5) 
 
-        -- เช็คว่ามอนหายไป (ตาย / despawn)
-        if not ZOMBIE_FOLDER:FindFirstChild("1") then
-            print("[SUCCESS] Zombie[1] หายไป → ถือว่าตายแล้ว")
-            break
+        -- 2. เช็คสถานะบอส
+        local zombie, zRoot, bossDied = getZombie()
+
+        -- ❌ บอสตายแล้ว
+        if bossDied then
+            print("[SUCCESS] บอส (Zombie[1]) ตายแล้ว! จบการทำงาน")
+            break -- ออกจาก Loop
+        end
+        
+        -- ❌ ยังไม่เจอมอน (ยังไม่เกิด)
+        if not zombie then
+            print("[INFO] Zombie[1] ยังไม่เกิด, รอต่อไป...")
+            task.wait(0.1)
+            continue
         end
 
-        task.wait(0.1)
+        -- 3. Loop วาร์ปโจมตี (การวนซ้ำการวาร์ปเข้าหาบอส)
+        local humanoid = character:FindFirstChild("Humanoid")
+        
+        -- NEW Sub-Loop: วนซ้ำการวาร์ปเข้าโจมตี
+        while ZOMBIE_FOLDER:FindFirstChild("1") and humanoid and humanoid.Health > 0 do
+            -- ต้องหา RootPart ของบอสใหม่ทุกรอบ เพราะบอสอาจเคลื่อนที่
+            local currentZombie, currentZRoot, _ = getZombie()
+            
+            if not currentZombie then
+                print("[STATUS] บอสหายไประหว่าง Loop, ออกเพื่อเช็คการตาย")
+                break -- บอสน่าจะตายแล้ว
+            end
+            
+            -- ✔ เจอมอน → วาร์ปเข้าไปใกล้เพื่อโจมตีซ้ำ
+            print("[ACTION] บินเข้าโจมตี Zombie[1] ซ้ำ")
+            warpTo(character, currentZRoot.Position + Vector3.new(0, -10, 0))
+            
+            -- หน่วงเวลา 1 วินาที ก่อนวาร์ปโจมตีรอบใหม่
+            task.wait(0.1) 
+            
+            -- เช็ค Health ผู้เล่นซ้ำอีกครั้งก่อนวนรอบใหม่
+            if not humanoid or humanoid.Health <= 0 then
+                 print("[STATUS] ผู้เล่นตายระหว่าง Sub-Loop, ออกเพื่อรอเกิดใหม่")
+                 break
+            end
+        end
+        
+        -- ตรวจสอบผลลัพธ์ของ Sub-Loop
+        if not ZOMBIE_FOLDER:FindFirstChild("1") then
+            print("[STATUS] Zombie[1] หายไป → ถือว่าตายแล้ว, วนไปเช็คสถานะหลัก")
+            task.wait(1)
+        else
+            -- สาเหตุเดียวที่ Loop จบคือผู้เล่นตาย (เพราะบอสยังอยู่)
+            print("[STATUS] ผู้เล่นตาย, วนไปรอเกิดใหม่และวาร์ปใหม่")
+            task.wait(1)
+        end
     end
 
     print("[END] FarmZombie จบการทำงาน")
