@@ -1,0 +1,99 @@
+-- =========================
+-- STARTGAME : Zombie Loop
+-- =========================
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- รอตัวละคร
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart", 5)
+
+if not root then
+    warn("[ERROR] ไม่พบ HumanoidRootPart ของผู้เล่น")
+    return
+end
+
+-- จุดวาร์ปรอ
+local SAFE_POSITION = Vector3.new(24, 12, 70)
+
+-- Path มอนจริง
+local ENTITIES = workspace:FindFirstChild("Entities")
+if not ENTITIES then
+    warn("[ERROR] ไม่พบ workspace.Entities")
+    return
+end
+
+local ZOMBIE_FOLDER = ENTITIES:FindFirstChild("Zombie")
+if not ZOMBIE_FOLDER then
+    warn("[ERROR] ไม่พบ workspace.Entities.Zombie")
+    return
+end
+
+-- =========================
+-- ฟังก์ชันวาร์ป
+-- =========================
+local function warpTo(position)
+    root.CFrame = CFrame.new(position)
+end
+
+-- =========================
+-- ฟังก์ชันหามอน (ตัวเดียว)
+-- =========================
+local function getZombie()
+    local zombie = ZOMBIE_FOLDER:FindFirstChild("1")
+
+    if not zombie then
+        warn("[INFO] Zombie[1] ยังไม่เกิด")
+        return nil
+    end
+
+    -- หา part หลักของมอน
+    local mainPart =
+        zombie:FindFirstChild("HumanoidRootPart")
+        or zombie:FindFirstChild("Root")
+        or zombie:FindFirstChildWhichIsA("BasePart")
+
+    if not mainPart then
+        warn("[ERROR] Zombie[1] ไม่มี Part สำหรับวาร์ป")
+        return nil
+    end
+
+    return zombie, mainPart
+end
+
+-- =========================
+-- Loop หลัก
+-- =========================
+local function FarmZombie()
+    print("[START] เริ่ม Farm Zombie[1]")
+
+    while true do
+        local zombie, zRoot = getZombie()
+
+        -- ❌ ยังไม่เจอมอน
+        if not zombie then
+            warpTo(SAFE_POSITION)
+            task.wait(1)
+            continue
+        end
+
+        -- ✔ เจอมอน → บินเข้าไปใกล้
+        warpTo(zRoot.Position + Vector3.new(0, -10, 0))
+
+        -- เช็คว่ามอนหายไป (ตาย / despawn)
+        if not ZOMBIE_FOLDER:FindFirstChild("1") then
+            print("[SUCCESS] Zombie[1] หายไป → ถือว่าตายแล้ว")
+            break
+        end
+
+        task.wait(0.1)
+    end
+
+    print("[END] FarmZombie จบการทำงาน")
+end
+
+-- =========================
+-- เริ่มทำงาน
+-- =========================
+FarmZombie()
