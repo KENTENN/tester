@@ -134,7 +134,7 @@ local function FarmZombie()
             -- ✔ เจอมอน → วาร์ปเข้าไปใกล้เพื่อโจมตีซ้ำ
             warpTo(character, currentZRoot.Position + Vector3.new(0, -10, 0))
             
-            task.wait(1) -- หน่วงเวลา 1 วินาที ก่อนวาร์ปโจมตีรอบใหม่
+            task.wait(0.01) -- หน่วงเวลา 1 วินาที ก่อนวาร์ปโจมตีรอบใหม่
             
             -- **Optional Check:** ตรวจสอบ Health ซ้ำ เพื่อให้มั่นใจว่า Loop จะจบได้ทันทีที่ตาย
             if not humanoid or humanoid.Health <= 0 then
